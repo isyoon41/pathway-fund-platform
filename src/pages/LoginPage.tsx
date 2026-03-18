@@ -52,7 +52,14 @@ export default function LoginPage() {
       const { error } = await login(email, password)
       setLoading(false)
       if (error) {
-        setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+        const msg = error.message ?? ''
+        if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
+          setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+        } else if (msg.includes('Email not confirmed')) {
+          setError('이메일 인증이 필요합니다. Supabase 대시보드에서 "Confirm email"을 비활성화하거나 인증 메일을 확인하세요.')
+        } else {
+          setError(msg || '로그인 중 오류가 발생했습니다.')
+        }
       } else {
         navigate('/dashboard')
       }
@@ -60,14 +67,19 @@ export default function LoginPage() {
       const { error } = await register(email, password, name)
       setLoading(false)
       if (error) {
-        if (error.message?.includes('already registered')) {
-          setError('이미 가입된 이메일입니다.')
+        const msg = error.message ?? ''
+        if (msg.includes('already registered') || msg.includes('User already registered')) {
+          setError('이미 가입된 이메일입니다. 로그인 탭에서 로그인하세요.')
+        } else if (msg.includes('over_email_send_rate_limit') || msg.includes('rate limit')) {
+          setError('이메일 발송 한도를 초과했습니다. 잠시 후 다시 시도하세요.')
+        } else if (msg.includes('Signups not allowed')) {
+          setError('회원가입이 비활성화되어 있습니다. Supabase 대시보드 설정을 확인하세요.')
         } else {
-          setError('회원가입 중 오류가 발생했습니다.')
+          setError(msg || '회원가입 중 오류가 발생했습니다.')
         }
       } else {
-        setSuccessMsg('가입이 완료됐습니다. 이메일을 확인하여 인증 후 로그인하세요.')
-        setTimeout(() => switchMode('login'), 3000)
+        setSuccessMsg('가입 완료! 바로 로그인하세요. (이메일 인증이 비활성화된 경우)')
+        setTimeout(() => switchMode('login'), 2000)
       }
     }
   }
