@@ -53,10 +53,10 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // 1. 펀드 이름 조회
+    // 1. 펀드 이름 + 코드 조회
     const { data: fund, error: fundErr } = await supabase
       .from('funds')
-      .select('id, name')
+      .select('id, name, fund_code')
       .eq('id', fundId)
       .single()
     if (fundErr || !fund) throw new Error(`fund not found: ${fundErr?.message}`)
@@ -99,11 +99,11 @@ Deno.serve(async (req: Request) => {
       INTAKE_SHEET_HEADERS,
     )
 
-    // 6. Tally 폼 URL 생성 (공통 폼 + fund_id 쿼리파라미터)
-    const tallyFormBaseUrl = Deno.env.get('TALLY_FORM_BASE_URL') ?? ''
-    const intakeFormUrl = tallyFormBaseUrl
-      ? `${tallyFormBaseUrl}?fund_id=${fundId}`
-      : null
+    // 6. 자체 출자의향서 폼 URL 생성
+    // fund_code가 있으면 /intake/{fund_code}, 없으면 /intake/{fund_id}
+    const siteUrl = Deno.env.get('SITE_URL') ?? 'https://pathway-fund-platform.vercel.app'
+    const intakeSlug = (fund as any).fund_code || fundId
+    const intakeFormUrl = `${siteUrl}/intake/${intakeSlug}`
 
     // 7. Drive 폴더 URL
     const driveFolderUrl = `https://drive.google.com/drive/folders/${fundFolderId}`

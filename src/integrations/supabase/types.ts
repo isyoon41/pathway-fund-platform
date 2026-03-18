@@ -42,6 +42,7 @@ export interface Database {
         Row: {
           id: string
           name: string
+          fund_code: string | null
           target_amount: number
           current_amount: number
           status: FundStatus
@@ -52,6 +53,7 @@ export interface Database {
         Insert: {
           id?: string
           name: string
+          fund_code?: string | null
           target_amount: number
           current_amount?: number
           status?: FundStatus
@@ -62,6 +64,7 @@ export interface Database {
         Update: {
           id?: string
           name?: string
+          fund_code?: string | null
           target_amount?: number
           current_amount?: number
           status?: FundStatus

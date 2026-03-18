@@ -9,6 +9,7 @@ export function useCreateFund() {
   return useMutation({
     mutationFn: async (fund: {
       name: string
+      fund_code?: string
       target_amount: number
       description?: string
       status?: 'active' | 'fundraising' | 'closed' | 'archived'

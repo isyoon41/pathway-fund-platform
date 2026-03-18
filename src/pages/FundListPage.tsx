@@ -36,6 +36,7 @@ export default function FundListPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState({
     name: '',
+    fund_code: '',
     target_amount: '',
     description: '',
     status: 'fundraising' as FundStatus,
@@ -45,12 +46,13 @@ export default function FundListPage() {
     e.preventDefault()
     await createFund.mutateAsync({
       name: form.name,
+      fund_code: form.fund_code.trim() || undefined,
       target_amount: Number(form.target_amount),
       description: form.description || undefined,
       status: form.status,
     })
     setDialogOpen(false)
-    setForm({ name: '', target_amount: '', description: '', status: 'fundraising' })
+    setForm({ name: '', fund_code: '', target_amount: '', description: '', status: 'fundraising' })
   }
 
   return (
@@ -130,8 +132,34 @@ export default function FundListPage() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 required
-                placeholder="예: PATHWAY 3호 펀드"
+                placeholder="예: 패스웨이 밸류업 1호"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fund-code">
+                펀드 코드
+                <span className="ml-1 text-xs text-muted-foreground font-normal">
+                  (출자의향서 URL에 사용, 영문·숫자·하이픈)
+                </span>
+              </Label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">/intake/</span>
+                <Input
+                  id="fund-code"
+                  value={form.fund_code}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      fund_code: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                    }))
+                  }
+                  placeholder="예: valueup-1, equity-5"
+                  className="flex-1"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                비워두면 펀드 ID(UUID)가 자동 사용됩니다.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="fund-target">목표금액 (원) *</Label>

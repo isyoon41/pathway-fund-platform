@@ -13,6 +13,7 @@ import DocumentListPage from '@/pages/DocumentListPage'
 import EmailLogPage from '@/pages/EmailLogPage'
 import TemplatePage from '@/pages/TemplatePage'
 import UserSettingsPage from '@/pages/UserSettingsPage'
+import IntakeFormPage from '@/pages/IntakeFormPage'
 import { Toaster } from '@/components/ui/toaster'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* 비로그인 공개 출자의향서 페이지 */}
+        <Route path="/intake/:fundCode" element={<IntakeFormPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route
           element={
