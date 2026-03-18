@@ -128,7 +128,7 @@ export function useRequestDocumentGeneration() {
       const { data, error } = await supabase.functions.invoke(
         'generate-document',
         {
-          body: { commitmentId, fundId, type },
+          body: { commitment_id: commitmentId, fund_id: fundId, type },
         }
       )
       if (error) throw error
@@ -209,7 +209,7 @@ export function useProvisionFund() {
       const { data, error } = await supabase.functions.invoke(
         'provision-fund',
         {
-          body: { fundId },
+          body: { fund_id: fundId },
         }
       )
       if (error) throw error
