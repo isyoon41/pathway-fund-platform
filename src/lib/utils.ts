@@ -5,7 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatAmount(amount: number): string {
+export function formatAmount(amount: number | null | undefined): string {
+  if (amount == null || isNaN(amount)) return '-'
   if (amount >= 100000000) {
     return `${(amount / 100000000).toFixed(1)}억원`
   }
