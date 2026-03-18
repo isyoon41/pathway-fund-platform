@@ -9,6 +9,7 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   login: (email: string, password: string) => Promise<{ error: Error | null }>
+  register: (email: string, password: string, name: string) => Promise<{ error: Error | null }>
   logout: () => Promise<void>
 }
 
@@ -70,13 +71,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null }
   }
 
+  async function register(email: string, password: string, name: string) {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name },
+      },
+    })
+    return { error: error as Error | null }
+  }
+
   async function logout() {
     await supabase.auth.signOut()
   }
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, login, logout }}
+      value={{ session, user, profile, loading, login, register, logout }}
     >
       {children}
     </AuthContext.Provider>
