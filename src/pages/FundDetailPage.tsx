@@ -390,10 +390,10 @@ function TabInfo({ fund }: { fund: Record<string, unknown> }) {
               {formatDate(fund.created_at as string)}
             </dd>
           </div>
-          {fund.description && (
+          {(fund.description as string | null) && (
             <div className="sm:col-span-2 lg:col-span-3">
               <dt className="text-sm text-muted-foreground">설명</dt>
-              <dd className="font-medium mt-1">{fund.description as string}</dd>
+              <dd className="font-medium mt-1">{String(fund.description)}</dd>
             </div>
           )}
         </dl>
