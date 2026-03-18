@@ -151,6 +151,89 @@ export function useActivityLogs(commitmentId?: string) {
   })
 }
 
+// ── Fund-scoped hooks (펀드 상세 페이지용) ──
+
+export function useFundSchedules(fundId?: string) {
+  return useQuery({
+    queryKey: ['fund_schedules', fundId],
+    enabled: !!fundId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('schedules')
+        .select('*, commitments(id, investors(name))')
+        .eq('fund_id', fundId!)
+        .order('scheduled_at', { ascending: true })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useFundDocuments(fundId?: string) {
+  return useQuery({
+    queryKey: ['fund_documents', fundId],
+    enabled: !!fundId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*, commitments(id, investors(name))')
+        .eq('fund_id', fundId!)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useFundEmailLogs(fundId?: string) {
+  return useQuery({
+    queryKey: ['fund_email_logs', fundId],
+    enabled: !!fundId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_logs')
+        .select('*, investors(name)')
+        .eq('fund_id', fundId!)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useFundActivityLogs(fundId?: string) {
+  return useQuery({
+    queryKey: ['fund_activity_logs', fundId],
+    enabled: !!fundId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*, profiles(name)')
+        .eq('fund_id', fundId!)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useFundInvestors(fundId?: string) {
+  return useQuery({
+    queryKey: ['fund_investors', fundId],
+    enabled: !!fundId,
+    queryFn: async () => {
+      // commitments를 통해 해당 펀드에 연결된 투자자 조회
+      const { data, error } = await supabase
+        .from('commitments')
+        .select('investor_id, requested_amount, confirmed_amount, status, investors(*)')
+        .eq('fund_id', fundId!)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
 export function useDashboardStats() {
   return useQuery({
     queryKey: ['dashboard_stats'],
