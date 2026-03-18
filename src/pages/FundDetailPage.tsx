@@ -243,10 +243,13 @@ export default function FundDetailPage() {
 
   const fundAssets = (fund as Record<string, unknown>).fund_assets as
     | {
+        drive_folder_id: string | null
+        drive_folder_url: string | null
         intake_form_id: string | null
         intake_form_url: string | null
-        intake_spreadsheet_id: string | null
         intake_folder_id: string | null
+        intake_spreadsheet_id: string | null
+        intake_spreadsheet_url: string | null
         confirmation_folder_id: string | null
         provisioning_status: ProvisioningStatus
       }[]
@@ -412,10 +415,13 @@ function TabAssets({
   provisionFund,
 }: {
   asset: {
+    drive_folder_id: string | null
+    drive_folder_url: string | null
     intake_form_id: string | null
     intake_form_url: string | null
-    intake_spreadsheet_id: string | null
     intake_folder_id: string | null
+    intake_spreadsheet_id: string | null
+    intake_spreadsheet_url: string | null
     confirmation_folder_id: string | null
     provisioning_status: ProvisioningStatus
   } | null
@@ -428,23 +434,22 @@ function TabAssets({
   const canProvision = !asset || status === 'pending' || status === 'failed'
 
   const driveBaseUrl = 'https://drive.google.com/drive/folders/'
-  const formBaseUrl = 'https://docs.google.com/forms/d/'
-  const sheetBaseUrl = 'https://docs.google.com/spreadsheets/d/'
 
   type AssetRow = {
     icon: typeof FolderOpen
     label: string
     id: string | null
     url: string | null
-    editUrl?: string | null
+    description?: string
   }
 
   const rows: AssetRow[] = [
     {
       icon: FolderOpen,
-      label: 'Drive 폴더',
-      id: null, // root folder id would come from fund_assets later
-      url: null,
+      label: '펀드 Drive 폴더',
+      id: asset?.drive_folder_id ?? null,
+      url: asset?.drive_folder_url ?? (asset?.drive_folder_id ? `${driveBaseUrl}${asset.drive_folder_id}` : null),
+      description: '펀드 전체 자료 폴더',
     },
     {
       icon: FolderOpen,
@@ -453,6 +458,7 @@ function TabAssets({
       url: asset?.intake_folder_id
         ? `${driveBaseUrl}${asset.intake_folder_id}`
         : null,
+      description: '출자의향 접수 관련 파일',
     },
     {
       icon: FolderOpen,
@@ -461,23 +467,23 @@ function TabAssets({
       url: asset?.confirmation_folder_id
         ? `${driveBaseUrl}${asset.confirmation_folder_id}`
         : null,
+      description: '출자확인서 파일',
     },
     {
       icon: ClipboardList,
-      label: '출자의향 접수폼',
+      label: '출자의향 접수폼 (Tally)',
       id: asset?.intake_form_id ?? null,
       url: asset?.intake_form_url ?? null,
-      editUrl: asset?.intake_form_id
-        ? `${formBaseUrl}${asset.intake_form_id}/edit`
-        : null,
+      description: '투자자에게 전달할 출자의향서 링크',
     },
     {
       icon: FileSpreadsheet,
-      label: '응답 스프레드시트',
+      label: '출자의향 접수응답 스프레드시트',
       id: asset?.intake_spreadsheet_id ?? null,
-      url: asset?.intake_spreadsheet_id
-        ? `${sheetBaseUrl}${asset.intake_spreadsheet_id}`
-        : null,
+      url: asset?.intake_spreadsheet_url ?? (asset?.intake_spreadsheet_id
+        ? `https://docs.google.com/spreadsheets/d/${asset.intake_spreadsheet_id}/edit`
+        : null),
+      description: 'Tally 폼 응답이 자동으로 기록되는 시트',
     },
   ]
 
@@ -507,37 +513,34 @@ function TabAssets({
           {rows.map((row) => {
             const Icon = row.icon
             const isReady = !!row.id || !!row.url
+            const isTallyForm = row.label.includes('Tally')
+            const isSpreadsheet = row.label.includes('스프레드시트')
             return (
               <div
                 key={row.label}
                 className={`flex items-center justify-between px-6 py-4 ${
-                  row.label === '출자의향 접수폼'
-                    ? 'bg-blue-50/50'
-                    : ''
+                  isTallyForm ? 'bg-blue-50/50' : isSpreadsheet ? 'bg-green-50/40' : ''
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm font-medium">{row.label}</span>
-                  {isReady ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Clock className="h-4 w-4 text-gray-300" />
-                  )}
+                <div className="flex items-start gap-3">
+                  <Icon className="h-4 w-4 text-gray-400 mt-0.5" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{row.label}</span>
+                      {isReady ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <Clock className="h-3.5 w-3.5 text-gray-300" />
+                      )}
+                    </div>
+                    {row.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{row.description}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {row.id && <CopyButton text={row.id} />}
+                <div className="flex items-center gap-1 shrink-0 ml-4">
+                  {row.url && <CopyButton text={row.url} />}
                   {row.url && <ExternalLinkButton href={row.url} />}
-                  {row.editUrl && (
-                    <a
-                      href={row.editUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-600"
-                    >
-                      편집
-                    </a>
-                  )}
                 </div>
               </div>
             )

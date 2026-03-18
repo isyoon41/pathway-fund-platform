@@ -28,16 +28,19 @@
  * 1. Tally signing secret 검증
  * 2. fields에서 이름/이메일/연락처/선호연락방식/출자의향금액/비고/fund_id 추출
  * 3. investor upsert → commitment 생성 → schedule 생성
- * 4. (선택) Google Calendar 이벤트 생성
+ * 4. 펀드별 Google Spreadsheet에 응답 행 추가 (provision-fund 에서 생성된 시트)
+ * 5. (선택) Google Calendar 이벤트 생성
  *
  * 환경변수:
- *   TALLY_SIGNING_SECRET — Tally webhook signing secret
- *   GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_CALENDAR_ID — 캘린더 연동용
+ *   TALLY_SIGNING_SECRET       — Tally webhook signing secret
+ *   GOOGLE_SERVICE_ACCOUNT_KEY — 서비스 계정 JSON (drive + sheets 스코프)
+ *   GOOGLE_CALENDAR_ID         — Google Calendar ID
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsResponse, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAccessToken } from '../_shared/google-auth.ts'
+import { appendSheetRow } from '../_shared/google-drive.ts'
 
 // ── Field extractor ─────────────────────────────────────────────────────────
 
@@ -111,6 +114,15 @@ async function verifyTallySignature(
   return signature === expectedSignature
 }
 
+// ── KST datetime formatter ──────────────────────────────────────────────────
+
+function toKSTDatetime(isoString?: string): string {
+  const date = isoString ? new Date(isoString) : new Date()
+  // UTC+9
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000)
+  return kst.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19)
+}
+
 // ── Main handler ────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -138,6 +150,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const fields: TallyField[] = body.data?.fields ?? []
+    const submittedAt = body.data?.createdAt ?? new Date().toISOString()
 
     // 3. Extract field values
     const investorName = getFieldValue(fields, '이름')
@@ -259,16 +272,56 @@ Deno.serve(async (req: Request) => {
       description: `Tally.so를 통한 출자의향 접수: ${investorName} (${investorEmail}), 금액: ${amountRaw || '미입력'}`,
     })
 
-    // 10. Google Calendar event (optional)
+    // 10. Google Spreadsheet에 응답 행 추가 ─────────────────────────────────
+    const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY')
+    if (serviceAccountJson) {
+      try {
+        // fund_assets에서 스프레드시트 ID 조회
+        const { data: assetRow } = await supabase
+          .from('fund_assets')
+          .select('intake_spreadsheet_id')
+          .eq('fund_id', fundId)
+          .single()
+
+        const spreadsheetId = assetRow?.intake_spreadsheet_id
+
+        if (spreadsheetId) {
+          const sheetToken = await getAccessToken(serviceAccountJson, [
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/spreadsheets',
+          ])
+
+          // 헤더 순서: 접수일시, 이름, 이메일, 연락처, 선호연락방식, 출자의향금액(원), 비고, commitment_id, investor_id
+          await appendSheetRow(sheetToken, spreadsheetId, [
+            toKSTDatetime(submittedAt),
+            investorName,
+            investorEmail,
+            investorPhone || '',
+            preferredContactRaw || '',
+            requestedAmount || '',
+            notes || '',
+            commitmentId,
+            investorId,
+          ])
+          console.log(`Sheet row appended: ${spreadsheetId}`)
+        } else {
+          console.warn(`No spreadsheet found for fund ${fundId} — skipping sheet append`)
+        }
+      } catch (sheetError) {
+        // Non-fatal: DB에는 이미 저장됨
+        console.error('Spreadsheet append error (non-fatal):', sheetError)
+      }
+    }
+
+    // 11. Google Calendar event (optional) ───────────────────────────────────
     let calendarEventId: string | null = null
     let calendarEventUrl: string | null = null
 
-    const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY')
     const calendarId = Deno.env.get('GOOGLE_CALENDAR_ID')
 
     if (serviceAccountJson && calendarId) {
       try {
-        const token = await getAccessToken(serviceAccountJson, [
+        const calToken = await getAccessToken(serviceAccountJson, [
           'https://www.googleapis.com/auth/calendar',
         ])
 
@@ -278,7 +331,7 @@ Deno.serve(async (req: Request) => {
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${calToken}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -308,12 +361,11 @@ Deno.serve(async (req: Request) => {
           console.error('Calendar event creation failed:', calErr)
         }
       } catch (calError) {
-        console.error('Calendar integration error:', calError)
-        // Non-fatal: continue without calendar
+        console.error('Calendar integration error (non-fatal):', calError)
       }
     }
 
-    // 11. Response
+    // 12. Response
     return jsonResponse({
       investor_id: investorId,
       commitment_id: commitmentId,

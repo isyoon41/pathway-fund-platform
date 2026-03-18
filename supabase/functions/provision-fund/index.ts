@@ -1,21 +1,41 @@
 /**
- * provision-fund: 펀드 생성 시 Google Drive 폴더 + Tally.so 폼 URL 연결
+ * provision-fund: 펀드 생성 시 Google Drive 폴더 + 스프레드시트 자동 생성
  *
  * Body: { fund_id: string }
  *
- * 1. Google Drive에 펀드 폴더 구조 생성 (ROOT/{펀드명}/출자의향접수/, 출자확인서/)
- * 2. fund_assets에 Tally 폼 URL + Drive 폴더 ID 저장
+ * 1. Google Drive에 펀드 폴더 구조 생성
+ *    ROOT/{펀드명}/
+ *      ├── 출자의향접수/   ← 접수응답 스프레드시트 생성
+ *      └── 출자확인서/
+ * 2. 출자의향접수 폴더에 응답 기록용 Google Spreadsheet 생성 (헤더 포함)
+ * 3. fund_assets에 Drive 폴더 ID/URL + 스프레드시트 ID/URL + Tally 폼 URL 저장
  *
  * 환경변수:
- *   GOOGLE_SERVICE_ACCOUNT_KEY — 서비스 계정 JSON
- *   GOOGLE_DRIVE_ROOT_FOLDER_ID — 루트 폴더 ID
- *   TALLY_FORM_BASE_URL — 예: https://tally.so/r/{formId} (펀드별 폼 또는 공통 폼)
+ *   GOOGLE_SERVICE_ACCOUNT_KEY  — 서비스 계정 JSON (drive + sheets 스코프)
+ *   GOOGLE_DRIVE_ROOT_FOLDER_ID — 루트 폴더 ID (펀드운영_루트)
+ *   TALLY_FORM_BASE_URL         — 예: https://tally.so/r/{formId}
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsResponse, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAccessToken } from '../_shared/google-auth.ts'
-import { findOrCreateFolder } from '../_shared/google-drive.ts'
+import {
+  findOrCreateFolder,
+  createSpreadsheetWithHeaders,
+} from '../_shared/google-drive.ts'
+
+// 출자의향 접수응답 스프레드시트 헤더
+const INTAKE_SHEET_HEADERS = [
+  '접수일시',
+  '이름',
+  '이메일',
+  '연락처',
+  '선호연락방식',
+  '출자의향금액(원)',
+  '비고',
+  'commitment_id',
+  'investor_id',
+]
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return corsResponse()
@@ -33,7 +53,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // 1. Fetch fund name
+    // 1. 펀드 이름 조회
     const { data: fund, error: fundErr } = await supabase
       .from('funds')
       .select('id, name')
@@ -41,7 +61,7 @@ Deno.serve(async (req: Request) => {
       .single()
     if (fundErr || !fund) throw new Error(`fund not found: ${fundErr?.message}`)
 
-    // 2. Upsert fund_assets with provisioning status
+    // 2. 프로비저닝 시작 상태로 upsert
     await supabase
       .from('fund_assets')
       .upsert(
@@ -49,13 +69,14 @@ Deno.serve(async (req: Request) => {
         { onConflict: 'fund_id' },
       )
 
-    // 3. Get service account token (Drive scope)
+    // 3. 서비스 계정 액세스 토큰 (Drive + Sheets 스코프)
     const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY')!
     const token = await getAccessToken(serviceAccountJson, [
       'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/spreadsheets',
     ])
 
-    // 4. Create Drive folder structure: ROOT/{펀드명}/
+    // 4. Drive 폴더 구조 생성: ROOT/{펀드명}/출자의향접수/, 출자확인서/
     const rootFolderId = Deno.env.get('GOOGLE_DRIVE_ROOT_FOLDER_ID')!
     const fundFolderId = await findOrCreateFolder(token, fund.name, rootFolderId)
     const intakeFolderId = await findOrCreateFolder(
@@ -69,19 +90,25 @@ Deno.serve(async (req: Request) => {
       fundFolderId,
     )
 
-    // 5. Determine Tally form URL
-    // 기본: TALLY_FORM_BASE_URL 환경변수 (공통 폼)
-    // 펀드별 폼이 필요하면 Tally 대시보드에서 폼 생성 후 fund_assets에 직접 입력
+    // 5. 출자의향접수 폴더에 응답 기록용 스프레드시트 생성
+    const sheetTitle = `${fund.name} 출자의향 접수응답`
+    const { spreadsheetId, spreadsheetUrl } = await createSpreadsheetWithHeaders(
+      token,
+      sheetTitle,
+      intakeFolderId,
+      INTAKE_SHEET_HEADERS,
+    )
+
+    // 6. Tally 폼 URL 생성 (공통 폼 + fund_id 쿼리파라미터)
     const tallyFormBaseUrl = Deno.env.get('TALLY_FORM_BASE_URL') ?? ''
-    // 쿼리파라미터로 fund_id를 넘겨 Tally hidden field로 매핑
     const intakeFormUrl = tallyFormBaseUrl
       ? `${tallyFormBaseUrl}?fund_id=${fundId}`
       : null
 
-    // 6. Build Google Drive folder URL
+    // 7. Drive 폴더 URL
     const driveFolderUrl = `https://drive.google.com/drive/folders/${fundFolderId}`
 
-    // 7. Update fund_assets
+    // 8. fund_assets 업데이트
     await supabase
       .from('fund_assets')
       .update({
@@ -90,15 +117,17 @@ Deno.serve(async (req: Request) => {
         intake_folder_id: intakeFolderId,
         confirmation_folder_id: confirmationFolderId,
         intake_form_url: intakeFormUrl,
+        intake_spreadsheet_id: spreadsheetId,
+        intake_spreadsheet_url: spreadsheetUrl,
         provisioning_status: 'ready',
       })
       .eq('fund_id', fundId)
 
-    // 8. Activity log
+    // 9. 활동 로그
     await supabase.from('activity_logs').insert({
       fund_id: fundId,
       action: 'provision_complete',
-      description: `펀드 운영자산 프로비저닝 완료: Drive 폴더 생성, Tally 폼 연결`,
+      description: `펀드 운영자산 프로비저닝 완료: Drive 폴더 생성 (${driveFolderUrl}), 출자의향 접수응답 스프레드시트 생성`,
     })
 
     return jsonResponse({
@@ -108,10 +137,28 @@ Deno.serve(async (req: Request) => {
       intake_folder_id: intakeFolderId,
       confirmation_folder_id: confirmationFolderId,
       intake_form_url: intakeFormUrl,
+      intake_spreadsheet_id: spreadsheetId,
+      intake_spreadsheet_url: spreadsheetUrl,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('provision-fund error:', message)
+
+    // 실패 시 상태 업데이트
+    try {
+      const body = await new Response(null).json().catch(() => ({}))
+      if ((body as any)?.fund_id) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+        )
+        await supabase
+          .from('fund_assets')
+          .update({ provisioning_status: 'failed' })
+          .eq('fund_id', (body as any).fund_id)
+      }
+    } catch (_) { /* ignore */ }
+
     return errorResponse(message)
   }
 })

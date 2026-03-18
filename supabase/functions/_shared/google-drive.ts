@@ -1,5 +1,6 @@
 /**
  * Google Drive helper functions for folder & file management.
+ * Also includes Google Sheets helpers (Sheets API v4).
  */
 
 export async function findOrCreateFolder(
@@ -171,4 +172,78 @@ export async function uploadPdfToDrive(
   if (!res.ok) throw new Error(`PDF upload failed: ${await res.text()}`)
   const data = await res.json()
   return data.id as string
+}
+
+// ── Google Sheets helpers ──────────────────────────────────────────────────
+
+/**
+ * Drive scope로 취득한 token으로 Sheets 파일을 Drive에 생성 후,
+ * Sheets API로 헤더 행을 입력합니다.
+ * Returns: { spreadsheetId, spreadsheetUrl }
+ */
+export async function createSpreadsheetWithHeaders(
+  token: string,
+  title: string,
+  parentFolderId: string,
+  headers: string[],
+): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
+  // 1. Drive API로 Sheets 파일 생성 (Drive scope으로 가능)
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: title,
+      mimeType: 'application/vnd.google-apps.spreadsheet',
+      parents: [parentFolderId],
+    }),
+  })
+  if (!createRes.ok)
+    throw new Error(`Spreadsheet creation failed: ${await createRes.text()}`)
+  const createData = await createRes.json()
+  const spreadsheetId = createData.id as string
+  const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
+
+  // 2. Sheets API로 헤더 행 작성 (Drive scope이 있으면 Sheets도 접근 가능)
+  const headerRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=RAW`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ values: [headers] }),
+    },
+  )
+  if (!headerRes.ok) {
+    console.warn(`Header row write failed (non-fatal): ${await headerRes.text()}`)
+  }
+
+  return { spreadsheetId, spreadsheetUrl }
+}
+
+/**
+ * 기존 스프레드시트에 새 행을 추가합니다.
+ */
+export async function appendSheetRow(
+  token: string,
+  spreadsheetId: string,
+  values: (string | number | null)[],
+): Promise<void> {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ values: [values] }),
+    },
+  )
+  if (!res.ok)
+    throw new Error(`Sheet row append failed: ${await res.text()}`)
 }

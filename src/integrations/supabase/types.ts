@@ -300,30 +300,39 @@ export interface Database {
         Row: {
           id: string
           fund_id: string
+          drive_folder_id: string | null
+          drive_folder_url: string | null
           intake_form_id: string | null
           intake_form_url: string | null
-          intake_spreadsheet_id: string | null
           intake_folder_id: string | null
+          intake_spreadsheet_id: string | null
+          intake_spreadsheet_url: string | null
           confirmation_folder_id: string | null
           provisioning_status: ProvisioningStatus
         }
         Insert: {
           id?: string
           fund_id: string
+          drive_folder_id?: string | null
+          drive_folder_url?: string | null
           intake_form_id?: string | null
           intake_form_url?: string | null
-          intake_spreadsheet_id?: string | null
           intake_folder_id?: string | null
+          intake_spreadsheet_id?: string | null
+          intake_spreadsheet_url?: string | null
           confirmation_folder_id?: string | null
           provisioning_status?: ProvisioningStatus
         }
         Update: {
           id?: string
           fund_id?: string
+          drive_folder_id?: string | null
+          drive_folder_url?: string | null
           intake_form_id?: string | null
           intake_form_url?: string | null
-          intake_spreadsheet_id?: string | null
           intake_folder_id?: string | null
+          intake_spreadsheet_id?: string | null
+          intake_spreadsheet_url?: string | null
           confirmation_folder_id?: string | null
           provisioning_status?: ProvisioningStatus
         }
